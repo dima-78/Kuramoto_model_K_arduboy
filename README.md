@@ -1,5 +1,7 @@
 Kuramoto Model Simulation with Pendulum Visualization.
+
 Description.
+
 This program implements a simulation of the Kuramoto model for synchronizing phase oscillators. The visualization is designed for the Arduboy platform and includes:
 
  - A rotating point on a circle, linked to the oscillators' phases.
