@@ -27,10 +27,22 @@ double K = 0.1;
 double *phases = NULL;     // указатель фаз
 double *frequencies = NULL; // указатель частот
 bool playSound = false;  // флаг звука
+bool soundPlayed = false; // флаг звука в крайних положениях маятника
+
+int tactCount = 0; // количество тактов маятника
+bool phasePassedZero = false; // флаг отслеживания перехода через 0
+
+unsigned long lastTactTime = 0; // время последнего такта
+unsigned long tactInterval = 0; // интервал между тактами
+double bpm = 0;                // количество ударов в минуту
+bool wasAtExtreme = false;     // флаг отслеживания крайних положений
+
+double smoothedBPM = 0; // для сглаживания
 
 void initializeArrays();
 void initializePhases();
 void updatePhases();
+void calculateBPM();
 void handleInput();
 void drawSimulation();
 void cleanup();
@@ -93,7 +105,14 @@ void loop() {
     
     handleInput();
     updatePhases();
-    drawSimulation();
+    double normalizedPhase = fmod(phases[0], 2 * PI);
+    if (normalizedPhase < 0) normalizedPhase += 2 * PI;
+    double angle = MAX_ANGLE * sin(normalizedPhase);  
+      
+    calculateBPM(normalizedPhase);
+    smoothBPM();
+    
+    drawSimulation();    
     arduboy.display();
 }
 
@@ -197,7 +216,7 @@ void handleInput() {
         }
     }
 
-    // Изменение K при удержании B_BUTTON
+    // изменение K при удержании B_BUTTON
     if (arduboy.pressed(B_BUTTON)) {
         if (arduboy.justPressed(UP_BUTTON)) {
             K += 0.01;
@@ -207,7 +226,7 @@ void handleInput() {
             K -= 0.01;
             if (K < 0.0) K = 0.0; 
         }
-    } else { // Логика изменения N, если B_BUTTON не удерживается
+    } else { // логика изменения N, если B_BUTTON не удерживается
         if (arduboy.justPressed(UP_BUTTON) && N < MAX_N) {
             N++;
             initializeArrays();  
@@ -243,7 +262,7 @@ void drawPhaseDistribution() {
     for (int i = 0; i < N; i++) {
         int x = CIRCLE_CENTER_X + CIRCLE_RADIUS * cos(phases[i]);
         int y = CIRCLE_CENTER_Y + CIRCLE_RADIUS * sin(phases[i]);
-        arduboy.drawPixel(x, y);  // Рисуем фазу как точку
+        arduboy.drawPixel(x, y);  //рисуем фазу как точку
     }
 }
 
@@ -260,17 +279,86 @@ void drawDynamicSine(double R) {
     }
 }
 
+void checkAndPlaySound(double angle) {
+    if (playSound) {
+        if (abs(angle - MAX_ANGLE) < 0.01 || abs(angle + MAX_ANGLE) < 0.01) {
+            if (!soundPlayed) {
+                int toneFreq = 880;
+                beep.tone(beep.freq(toneFreq));
+                arduboy.delayShort(10);
+                beep.noTone();
+                soundPlayed = true;
+            }
+        } else {
+            soundPlayed = false;
+        }
+    }
+}
+
+
+// DEBUG
+void smoothBPM() {
+    const double alpha = 0.1; // коэффициент сглаживания (0 < alpha < 1)
+    smoothedBPM = alpha * bpm + (1 - alpha) * smoothedBPM;
+}
+
+/*
+void calculateBPM(double normalizedPhase) {
+    // величина отклонения для определения крайнего положения
+    const double threshold = 0.01; 
+
+    // Проверяем, находится ли маятник в крайнем положении
+    bool atExtreme = (abs(normalizedPhase - PI / 2) < threshold || abs(normalizedPhase - 3 * PI / 2) < threshold);
+
+    if (atExtreme) {
+        if (!wasAtExtreme) { // Переход в крайнее положение
+            unsigned long currentTime = millis();
+            if (lastTactTime > 0) {
+                tactInterval = currentTime - lastTactTime;
+                if (tactInterval > 0) {
+                    bpm = 60000.0 / tactInterval;
+                }
+            }
+            lastTactTime = currentTime;
+            wasAtExtreme = true;
+        }
+    } else {
+        wasAtExtreme = false; // Маятник вышел из крайнего положения
+    }
+}
+*/
+
+void calculateBPM(double normalizedPhase) {
+    const double threshold = 0.05; // порог отклонения
+    bool atExtreme = (abs(normalizedPhase - PI / 2) < threshold || abs(normalizedPhase - 3 * PI / 2) < threshold);
+
+    if (atExtreme && !wasAtExtreme) { //фиксация крайнего положения
+        unsigned long currentTime = millis();
+        if (lastTactTime > 0) {
+            tactInterval = currentTime - lastTactTime;
+            bpm = 60000.0 / tactInterval;
+        }
+        lastTactTime = currentTime;
+        wasAtExtreme = true;
+    } else if (!atExtreme) {
+        wasAtExtreme = false;
+    }
+}
+
+
 void drawSimulation() {
     arduboy.clear();
 
     // tinyfont.setCursor(0, 0);
     // tinyfont.print("(K/N)*sum(sin(Theta_j-Theta_i))");
 
+    
     double meanFrequency = 0;
     for (int i = 0; i < N; i++) {
       meanFrequency += frequencies[i];
     }
     meanFrequency /= N;
+
 
     tinyfont.setCursor(0, 0);
     tinyfont.print("Freq=");
@@ -284,7 +372,7 @@ void drawSimulation() {
     tinyfont.print("DT= ");
     tinyfont.print(DT);
 
-    tinyfont.setCursor(0, 7);
+    tinyfont.setCursor(2, 6);
     tinyfont.print("K= ");
     tinyfont.print(K);
     
@@ -301,10 +389,10 @@ void drawSimulation() {
     int bottomY = PENDULUM_ORIGIN_Y + 40;      // нижний край треугольника (поднято)
 
     // корпус метронома (усечённый треугольник)
-    arduboy.drawLine(bottomX1, bottomY, topX1, topY);  // Левая сторона
-    arduboy.drawLine(bottomX2, bottomY, topX2, topY);  // Правая сторона
-    arduboy.drawLine(topX1, topY, topX2, topY);        // Усечённая вершина
-    arduboy.drawLine(bottomX1, bottomY, bottomX2, bottomY); // Основание
+    arduboy.drawLine(bottomX1, bottomY, topX1, topY);  // левая сторона
+    arduboy.drawLine(bottomX2, bottomY, topX2, topY);  // правая сторона
+    arduboy.drawLine(topX1, topY, topX2, topY);        // усечённая вершина
+    arduboy.drawLine(bottomX1, bottomY, bottomX2, bottomY); // основание
 
     // точка крепления маятника (центр основания корпуса)
     int pivotX = (bottomX1 + bottomX2) / 2;  // центр основания
@@ -358,15 +446,7 @@ void drawSimulation() {
     int pointY = graphYCenter - (int)(graphHeight * sin(normalizedPhase));
     arduboy.fillCircle(pointX, pointY, 1);
     
-    // beep.timer();
-    if (playSound) {
-        if (abs(sin(normalizedPhase) - 1.0) < 0.01 || abs(sin(normalizedPhase) + 1.0) < 0.01) {
-            //beep.tone(beep.freq(440), 1);
-                beep.tone(beep.freq(2000));
-                arduboy.delayShort(1);
-                beep.noTone();
-        }
-    }
+    checkAndPlaySound(angle);
     
     // метки на основании метронома
     for (int i = -5; i <= 5; i++) {
@@ -389,11 +469,49 @@ void drawSimulation() {
     tinyfont.setCursor(12, 56);
     tinyfont.print("Angle:");
     tinyfont.print(angleDegrees);
-    tinyfont.setCursor(69, 7);
+    tinyfont.setCursor(68, 6);
     tinyfont.print("Pendulum:");
-    tinyfont.print(angle * (abs(180.0 / PI)), 2);
-}
+    tinyfont.print(angle * (abs(180.0 / PI)), 0);
 
+    //double bpm = (1.0 / (DT * 2 * PI)) * 60;
+
+    
+    // подсчет тактов
+    /*
+    if (normalizedPhase < PI && !phasePassedZero) {
+        tactCount++;
+        phasePassedZero = true;
+    } 
+    if (normalizedPhase >= PI) {
+        phasePassedZero = false;
+    }
+    */
+    
+    // подсчет BPM (ударов в минуту)
+    /*
+    static bool wasAtExtreme = false;
+    if (abs(normalizedPhase - PI / 2) < 0.01 || abs(normalizedPhase - 3 * PI / 2) < 0.01) {
+        if (!wasAtExtreme) {
+            unsigned long currentTime = millis();
+            if (lastTactTime > 0) {
+                unsigned long deltaTime = currentTime - lastTactTime;
+                bpm = 60000.0 / deltaTime;
+            }
+            lastTactTime = currentTime;
+            wasAtExtreme = true;
+        }
+    } else {
+        wasAtExtreme = false;
+    }
+    */
+
+    //calculateBPM(normalizedPhase);
+    
+    tinyfont.setCursor(76, 14);
+    tinyfont.print("BPM:");
+    //tinyfont.print(smoothedBPM, 0);
+    tinyfont.print(bpm, 0);
+}
 
 void cleanup() {
     free(phases);
