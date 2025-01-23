@@ -160,49 +160,6 @@ void updatePhases() {
     free(newPhases);  // чистим временный массив
 }
 
-/*
-void handleInput() {
-    arduboy.pollButtons();
-    
-    if (arduboy.justPressed(A_BUTTON)) {
-        playSound = !playSound;
-    }
-    if (arduboy.justPressed(B_BUTTON)) {
-        DT += 0.01;
-        if (DT > 0.1) {
-            DT = 0.01; // Возврат к минимальному значению после превышения
-        }
-    }
-
-    // изменение K при удержании кнопки B
-    if (arduboy.pressed(B_BUTTON)) {
-        if (arduboy.justPressed(UP_BUTTON)) {
-            K += 0.01;
-            if (K > 1.0) K = 1.0; // ограничиваем K максимумом 1.0
-        }
-        if (arduboy.justPressed(DOWN_BUTTON)) {
-            K -= 0.01;
-            if (K < 0.0) K = 0.0; // ограничиваем K минимумом 0.0
-        }
-    }
-    
-    if (arduboy.justPressed(UP_BUTTON) && N < MAX_N) {
-        N++;
-        initializeArrays();  // пересоздаем массивы
-    }
-    if (arduboy.justPressed(DOWN_BUTTON) && N > MIN_N) {
-        N--;
-        initializeArrays();  // пересоздаем массивы
-    }
-    if (arduboy.pressed(RIGHT_BUTTON)) {
-        frequencies[0] += 0.1;  // изменение частоты
-    }
-    if (arduboy.pressed(LEFT_BUTTON)) {
-        frequencies[0] -= 0.1;
-    }
-}
-*/
-
 void handleInput() {
     arduboy.pollButtons();
     
@@ -302,32 +259,6 @@ void smoothBPM() {
     smoothedBPM = alpha * bpm + (1 - alpha) * smoothedBPM;
 }
 
-/*
-void calculateBPM(double normalizedPhase) {
-    // величина отклонения для определения крайнего положения
-    const double threshold = 0.01; 
-
-    // Проверяем, находится ли маятник в крайнем положении
-    bool atExtreme = (abs(normalizedPhase - PI / 2) < threshold || abs(normalizedPhase - 3 * PI / 2) < threshold);
-
-    if (atExtreme) {
-        if (!wasAtExtreme) { // Переход в крайнее положение
-            unsigned long currentTime = millis();
-            if (lastTactTime > 0) {
-                tactInterval = currentTime - lastTactTime;
-                if (tactInterval > 0) {
-                    bpm = 60000.0 / tactInterval;
-                }
-            }
-            lastTactTime = currentTime;
-            wasAtExtreme = true;
-        }
-    } else {
-        wasAtExtreme = false; // Маятник вышел из крайнего положения
-    }
-}
-*/
-
 void calculateBPM(double normalizedPhase) {
     const double threshold = 0.05; // порог отклонения
     bool atExtreme = (abs(normalizedPhase - PI / 2) < threshold || abs(normalizedPhase - 3 * PI / 2) < threshold);
@@ -345,20 +276,17 @@ void calculateBPM(double normalizedPhase) {
     }
 }
 
-
 void drawSimulation() {
     arduboy.clear();
 
     // tinyfont.setCursor(0, 0);
     // tinyfont.print("(K/N)*sum(sin(Theta_j-Theta_i))");
-
     
     double meanFrequency = 0;
     for (int i = 0; i < N; i++) {
       meanFrequency += frequencies[i];
     }
     meanFrequency /= N;
-
 
     tinyfont.setCursor(0, 0);
     tinyfont.print("Freq=");
