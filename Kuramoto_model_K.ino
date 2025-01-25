@@ -160,6 +160,49 @@ void updatePhases() {
     free(newPhases);  // чистим временный массив
 }
 
+/*
+void handleInput() {
+    arduboy.pollButtons();
+    
+    if (arduboy.justPressed(A_BUTTON)) {
+        playSound = !playSound;
+    }
+    if (arduboy.justPressed(B_BUTTON)) {
+        DT += 0.01;
+        if (DT > 0.1) {
+            DT = 0.01; // Возврат к минимальному значению после превышения
+        }
+    }
+
+    // изменение K при удержании кнопки B
+    if (arduboy.pressed(B_BUTTON)) {
+        if (arduboy.justPressed(UP_BUTTON)) {
+            K += 0.01;
+            if (K > 1.0) K = 1.0; // ограничиваем K максимумом 1.0
+        }
+        if (arduboy.justPressed(DOWN_BUTTON)) {
+            K -= 0.01;
+            if (K < 0.0) K = 0.0; // ограничиваем K минимумом 0.0
+        }
+    }
+    
+    if (arduboy.justPressed(UP_BUTTON) && N < MAX_N) {
+        N++;
+        initializeArrays();  // пересоздаем массивы
+    }
+    if (arduboy.justPressed(DOWN_BUTTON) && N > MIN_N) {
+        N--;
+        initializeArrays();  // пересоздаем массивы
+    }
+    if (arduboy.pressed(RIGHT_BUTTON)) {
+        frequencies[0] += 0.1;  // изменение частоты
+    }
+    if (arduboy.pressed(LEFT_BUTTON)) {
+        frequencies[0] -= 0.1;
+    }
+}
+*/
+
 void handleInput() {
     arduboy.pollButtons();
     
@@ -204,9 +247,9 @@ void handleInput() {
 
 
 void drawOrderParameter(double R) {
-    int barWidth = 80;  // ширина прогресс-бара
+    int barWidth = 50;  // ширина прогресс-бара
     int barHeight = 4;  // высота прогресс-бара
-    int barX = 24;      // по X
+    int barX = 7;      // по X
     int barY = 56;      // по Y
 
     int filledWidth = (int)(R * barWidth);  // ширина заполненной части
@@ -259,6 +302,32 @@ void smoothBPM() {
     smoothedBPM = alpha * bpm + (1 - alpha) * smoothedBPM;
 }
 
+/*
+void calculateBPM(double normalizedPhase) {
+    // величина отклонения для определения крайнего положения
+    const double threshold = 0.01; 
+
+    // Проверяем, находится ли маятник в крайнем положении
+    bool atExtreme = (abs(normalizedPhase - PI / 2) < threshold || abs(normalizedPhase - 3 * PI / 2) < threshold);
+
+    if (atExtreme) {
+        if (!wasAtExtreme) { // Переход в крайнее положение
+            unsigned long currentTime = millis();
+            if (lastTactTime > 0) {
+                tactInterval = currentTime - lastTactTime;
+                if (tactInterval > 0) {
+                    bpm = 60000.0 / tactInterval;
+                }
+            }
+            lastTactTime = currentTime;
+            wasAtExtreme = true;
+        }
+    } else {
+        wasAtExtreme = false; // Маятник вышел из крайнего положения
+    }
+}
+*/
+
 void calculateBPM(double normalizedPhase) {
     const double threshold = 0.05; // порог отклонения
     bool atExtreme = (abs(normalizedPhase - PI / 2) < threshold || abs(normalizedPhase - 3 * PI / 2) < threshold);
@@ -276,17 +345,20 @@ void calculateBPM(double normalizedPhase) {
     }
 }
 
+
 void drawSimulation() {
     arduboy.clear();
 
     // tinyfont.setCursor(0, 0);
     // tinyfont.print("(K/N)*sum(sin(Theta_j-Theta_i))");
+
     
     double meanFrequency = 0;
     for (int i = 0; i < N; i++) {
       meanFrequency += frequencies[i];
     }
     meanFrequency /= N;
+
 
     tinyfont.setCursor(0, 0);
     tinyfont.print("Freq=");
@@ -306,7 +378,7 @@ void drawSimulation() {
     
     // рассчитываем угол маятника, синхронизированный с движением точки по окружности
     double normalizedPhase = fmod(phases[0], 2 * PI);  // ограничиваем фазу от 0 до 2*PI
-    double angle = MAX_ANGLE * cos(normalizedPhase);   // отклонение маятника
+    double angle = MAX_ANGLE * sin(normalizedPhase);   // отклонение маятника
 
     // координаты корпуса метронома
     int topX1 = PENDULUM_ORIGIN_X - 5;         // левая точка вершины (уже)
@@ -394,8 +466,9 @@ void drawSimulation() {
     int angleDegrees = (int)(normalizedPhase * (180.0 / PI)) % 360;
     if (angleDegrees < 0) angleDegrees += 360;
 
-    tinyfont.setCursor(12, 56);
-    tinyfont.print("Angle:");
+    // tinyfont.setCursor(12, 56);
+    tinyfont.setCursor(16, 36);
+    tinyfont.print("Ang:");
     tinyfont.print(angleDegrees);
     tinyfont.setCursor(68, 6);
     tinyfont.print("Pendulum:");
@@ -434,11 +507,25 @@ void drawSimulation() {
     */
 
     //calculateBPM(normalizedPhase);
-    
-    tinyfont.setCursor(76, 14);
+   
+    tinyfont.setCursor(78, 14);
     tinyfont.print("BPM:");
     //tinyfont.print(smoothedBPM, 0);
     tinyfont.print(bpm, 0);
+    
+    double R = 0;
+    double sumX = 0;
+    double sumY = 0;
+    for (int i = 0; i < N; i++) {
+    sumX += cos(phases[i]);
+    sumY += sin(phases[i]);
+    }
+    R = sqrt(sumX * sumX + sumY * sumY) / N;
+    
+    drawOrderParameter(R);
+
+    drawDynamicSine(R);
+    
 }
 
 void cleanup() {
