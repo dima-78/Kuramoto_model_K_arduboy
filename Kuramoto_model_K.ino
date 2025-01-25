@@ -1,3 +1,7 @@
+// Kuramoto model_K v1.01
+// created @dima-78
+// 2025_01_25
+
 #include <Arduboy2.h>
 #include <stdlib.h>
 #include <math.h>
